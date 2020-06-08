@@ -76,24 +76,29 @@ static void draw( void ) {
   GLfloat mat_ambient[]     = {0.0, 0.0, 1.0, 1.0};
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
   
-  argDrawMode3D();              // Cambiamos el contexto a 3D
-  argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
-  glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
-  
-  argConvGlpara(patt_trans, gl_para);   // Convertimos la matriz de
-  glMatrixMode(GL_MODELVIEW);           //  la marca para ser usada
-  glLoadMatrixd(gl_para);               //  por OpenGL
-  
-  // Esta ultima parte del codigo es para dibujar el objeto 3D
-  glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
-  glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-  glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
-    glTranslatef(0.0, 0.0, 60.0);
-    glRotatef(90.0, 1.0, 0.0, 0.0);
-    glutSolidTeapot(80.0);
-  glDisable(GL_DEPTH_TEST);
+  /* Pintamos todos los objetos visibles */
+  for (int i = 0; i < nobjects; i++) {
+    if (objects[i].visible) {   // Si el objeto es visible
+      argDrawMode3D();              // Cambiamos el contexto a 3D
+      argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
+      glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
+      glEnable(GL_DEPTH_TEST);
+      glDepthFunc(GL_LEQUAL);
+      
+      argConvGlpara(objects[i].patt_trans, gl_para);   // Convertimos la matriz de
+      glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
+      glLoadMatrixd(gl_para);                          // por OpenGL
+      
+      // Esta ultima parte del codigo es para dibujar el objeto 3D
+      glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
+      glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+      glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+        glTranslatef(0.0, 0.0, 60.0);
+        glRotatef(90.0, 1.0, 0.0, 0.0);
+        glutSolidTeapot(80.0);
+      glDisable(GL_DEPTH_TEST);
+    }
+  }
 }
 
 // ======== init ====================================================
@@ -156,9 +161,12 @@ static void mainLoop(void) {
     }
 
     if(k != -1) {   // Si ha detectado el patron en algun sitio...
+      objects[i].visible = 1;
       // Obtener transformacion relativa entre la marca y la camara real
-      arGetTransMat(&marker_info[k], p_center, p_width, patt_trans);
+      arGetTransMat(&marker_info[k], objects[i].center, objects[i].width, objects[i].patt_trans);
       draw();       // Dibujamos los objetos de la escena
+    }else {
+      objects[i].visible = 0; // El objeto no es visible
     }
   }
 
