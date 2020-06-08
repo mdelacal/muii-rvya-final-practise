@@ -3,7 +3,7 @@ ARTOOLKITDIR = ../../ARToolKit
 INC_DIR      = $(ARTOOLKITDIR)/include
 LIB_DIR      = $(ARTOOLKITDIR)/lib
 
-LIBS   =  -lARgsub -lARvideo -lAR -lGL -lGLU -lglut -lm 
+LIBS   =  -lARgsub -lARvideo -lARMulti -lAR -lGL -lGLU -lglut -lm 
 
 NAMEEXEC     = practica
 
