@@ -4,6 +4,7 @@
 *  Máster Universitario en Ingeniería Informática *
 ***************************************************/
 
+/* LIBRERIAS AR */
 #include <GL/glut.h>    
 #include <AR/gsub.h>    
 #include <AR/video.h>   
@@ -15,11 +16,58 @@ int    patt_id;            // Identificador unico de la marca
 double patt_trans[3][4];   // Matriz de transformacion de la marca
 
 void print_error (char *error) {  printf(error); exit(0); }
+
 // ======== cleanup =================================================
 static void cleanup(void) {   
   arVideoCapStop();            // Libera recursos al salir ...
   arVideoClose();
   argCleanup();
+}
+
+// ==== Definicion de estructuras ===================================
+struct TObject{
+  int id;                               // Identificador unico de la marca
+  int visible;                          // Es visible el objeto
+  double width;                         // Ancho del patron
+  double center[2];                     // Centro del patron
+  double patt_trans[3][4];              // Matriz de transformacion de la marca
+  void (* drawme)(float,float,float);   // Puntero a funcion drawme
+  char color;
+  float colour[3];
+};
+
+struct TObject *objects = NULL;
+int nobjects = 0;
+
+// ==== addObject (Agrega un objeto a la lista de objetos) ==============
+void addObject(char *p, double w, double c[2], void (*drawme)(float,float,float))
+{
+  int patt_id;
+
+  if((patt_id = arLoadPatt(p)) < 0)
+    print_error ("Error en carga de patron\n");
+
+  nobjects++;
+  objects = (struct TObject *)
+    realloc(objects, sizeof(struct TObject)*nobjects);
+
+  objects[nobjects-1].id = patt_id;
+  objects[nobjects-1].width = w;
+  objects[nobjects-1].center[0] = c[0];
+  objects[nobjects-1].center[1] = c[1];
+  objects[nobjects-1].drawme = drawme;
+
+}
+
+// ======== keyboard ================================================
+static void keyboard(unsigned char key, int x, int y) {
+  switch (key) {
+  
+  // Recogemos los eventos de pulsaciones de teclas del teclado
+  case 0x1B: case 'Q': case 'q':
+    cleanup(); break;
+
+  }
 }
 
 // ======== draw ====================================================
@@ -52,21 +100,22 @@ static void draw( void ) {
 static void init( void ) {
   ARParam  wparam, cparam;   // Parametros intrinsecos de la camara
   int xsize, ysize;          // Tamano del video de camara (pixels)
-  
+  double c[2] = {0.0, 0.0};  // Centro de patron (por defecto)
+
   // Abrimos dispositivo de video
   if(arVideoOpen("") < 0) exit(0);  
   if(arVideoInqSize(&xsize, &ysize) < 0) exit(0);
 
-  // Cargamos los parametros intrinsecos de la camara
-  if(arParamLoad("data/webcam_2.dat", 1, &wparam) < 0)   
+  // Cargamos los parametros intrinsecos de la camara, tras haber calibrado la webcam
+  if(arParamLoad("data/webcam.dat", 1, &wparam) < 0)   
     print_error ("Error en carga de parametros de camara\n");
   
   arParamChangeSize(&wparam, xsize, ysize, &cparam);
   arInitCparam(&cparam);   // Inicializamos la camara con "cparam"
 
-  // Cargamos la marca que vamos a reconocer en este ejemplo
-  if((patt_id=arLoadPatt("data/bomb.pat")) < 0) 
-    print_error ("Error en carga de patron\n");
+  // Inicializamos la lista de objetos
+  addObject("data/bomb.patt", 90.0, c, draw);
+  addObject("data/coin.patt", 90.0, c, draw);
 
   argInit(&cparam, 1.0, 0, 0, 0, 0);   // Abrimos la ventana 
 }
@@ -75,7 +124,7 @@ static void init( void ) {
 static void mainLoop(void) {
   ARUint8 *dataPtr;
   ARMarkerInfo *marker_info;
-  int marker_num, j, k;
+  int marker_num, i, j, k;
 
   double p_width     = 90.0;        // Ancho del patron (marca)
   // double p_width     = 120.0;        // Ancho del patron (marca)
@@ -98,17 +147,19 @@ static void mainLoop(void) {
   arVideoCapNext();      // Frame pintado y analizado... A por otro!
 
   // Vemos donde detecta el patron con mayor fiabilidad
-  for(j = 0, k = -1; j < marker_num; j++) {
-    if(patt_id == marker_info[j].id) {
-      if (k == -1) k = j;
-      else if(marker_info[k].cf < marker_info[j].cf) k = j;
+  for (i = 0; i < nobjects; i++) {
+    for(j = 0, k = -1; j < marker_num; j++) {
+      if(objects[i].id == marker_info[j].id) {
+        if (k == -1) k = j;
+        else if(marker_info[k].cf < marker_info[j].cf) k = j;
+      }
     }
-  }
 
-  if(k != -1) {   // Si ha detectado el patron en algun sitio...
-    // Obtener transformacion relativa entre la marca y la camara real
-    arGetTransMat(&marker_info[k], p_center, p_width, patt_trans);
-    draw();       // Dibujamos los objetos de la escena
+    if(k != -1) {   // Si ha detectado el patron en algun sitio...
+      // Obtener transformacion relativa entre la marca y la camara real
+      arGetTransMat(&marker_info[k], p_center, p_width, patt_trans);
+      draw();       // Dibujamos los objetos de la escena
+    }
   }
 
   argSwapBuffers(); // Cambiamos el buffer con lo que tenga dibujado
@@ -118,9 +169,8 @@ static void mainLoop(void) {
 int main(int argc, char **argv) {
   glutInit(&argc, argv);    // Creamos la ventana OpenGL con Glut
   init();                   // Llamada a nuestra funcion de inicio
-  
   arVideoCapStart();        // Creamos un hilo para captura de video
-  argMainLoop( NULL, NULL, mainLoop );   // Asociamos callbacks...
+  argMainLoop( NULL, keyboard, mainLoop );   // Asociamos callbacks para las funciones de teclado
 
   printf("¡¡¡Bienvenido al juego de Super Mario!!!");
 
