@@ -11,6 +11,7 @@
 #include <AR/param.h>   
 #include <AR/ar.h>
 #include <AR/arMulti.h>
+#include <math.h>
 
 // ==== Definicion de constantes y variables globales ===============
 int    patt_id;            // Identificador unico de la marca
@@ -128,9 +129,11 @@ static void draw_multi( void ) {
       argConvGlpara(mMarker->marker[i].trans, gl_para);   
       glMultMatrixd(gl_para);               
       if(mMarker->marker[i].visible < 0) {  // No se ha detectado
-	material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; }
+	      material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
+      }
       else {           // Se ha detectado (ponemos color verde)
-	material[0] = 0.0; material[1] = 1.0; material[2] = 0.0; }
+	      material[0] = 0.0; material[1] = 1.0; material[2] = 0.0; 
+      }
       glMaterialfv(GL_FRONT, GL_AMBIENT, material);
       glTranslatef(0.0, 0.0, 25.0);
       glutSolidCube(50.0);
@@ -144,6 +147,55 @@ static void draw_multi( void ) {
   }
 
   glDisable(GL_DEPTH_TEST);
+}
+
+// ======== rotacion patron =========================================
+static void calcular_velocidad( void ) {
+  double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
+  GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
+  int velocidad = 1;            // velocidad del juego
+  double v[3];
+  float angle = 0.0, module = 0.0;
+  double m[3][4], m2[3][4];
+  argDrawMode3D();              // Cambiamos el contexto a 3D
+  argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
+  glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
+
+  // Al ser visible el objeto COIN
+  argConvGlpara(objects[1].patt_trans, gl_para);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadMatrixd(gl_para);   // Cargamos su matriz de transf.
+
+  glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
+  glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+
+  // Calculamos el angulo de rotacion de la segunda marca si modo es 0, sino se queda el mismo color
+  v[0] = objects[1].patt_trans[0][0];
+  v[1] = objects[1].patt_trans[1][0];
+  v[2] = objects[1].patt_trans[2][0];
+
+  module = sqrt(pow(v[0],2)+pow(v[1],2)+pow(v[2],2));
+  v[0] = v[0]/module;
+  v[1] = v[1]/module;
+  v[2] = v[2]/module;
+
+  angle = acos (v[0]) * 57.2958;   // Sexagesimales! * (180/PI)
+  angle = angle * 2;//de 180 grados pasamos a tener 360 grados
+
+  if (angle <= 90) {
+    velocidad = 1;
+  } else if (angle > 90 && angle <= 180) {
+    velocidad = 2;
+  } else if (angle > 180 && angle <= 270) {
+    velocidad = 3;
+  } else if (angle > 270 && angle <= 360) {
+    velocidad = 4;
+  }
+  
+  printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
+
 }
 
 // ======== init ====================================================
@@ -214,6 +266,12 @@ static void mainLoop(void) {
       objects[i].visible = 0; // El objeto no es visible
     }
   }
+
+  // Detectar rotación y calcular velocidad
+  if (objects[1].visible = 1) {
+    calcular_velocidad();
+  }
+  
 
   // Detectar patrón Multimarca
   if(arMultiGetTransMat(marker_info, marker_num, mMarker) > 0) 
