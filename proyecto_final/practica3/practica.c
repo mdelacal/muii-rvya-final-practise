@@ -12,14 +12,18 @@
 #include <AR/ar.h>
 #include <AR/arMulti.h>
 #include <math.h>
+#include <stdio.h>
+#include <time.h>
 
 // ==== Definicion de constantes y variables globales ===============
-int    patt_id;            // Identificador unico de la marca
+int    pattid;            // Identificador unico de la marca
 double patt_trans[3][4];   // Matriz de transformacion de la marca
 ARMultiMarkerInfoT *mMarker;       // Estructura global Multimarca
-int dmode = 0;   // Modo dibujo (objeto centrado o cubos en marcas)
 
-void print_error (char *error) {  printf(error); exit(0); }
+void print_error (char *error) {  
+  printf("%s\n",error);
+  exit(0); 
+}
 
 // ======== cleanup =================================================
 static void cleanup(void) {   // Libera recursos al salir ...
@@ -68,7 +72,6 @@ static void keyboard(unsigned char key, int x, int y) {
   // Recogemos los eventos de pulsaciones de teclas del teclado
   case 0x1B: case 'Q': case 'q':
     cleanup(); break;
-  case 'D': case'd': if (dmode == 0) dmode=1; else dmode=0; break;
   }
 }
 
@@ -76,30 +79,61 @@ static void keyboard(unsigned char key, int x, int y) {
 static void draw( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat mat_ambient[]     = {0.0, 0.0, 1.0, 1.0};
-  GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
+  GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
   
   /* Pintamos todos los objetos visibles */
-  for (int i = 0; i < nobjects; i++) {
-    if (objects[i].visible) {   // Si el objeto es visible
-      argDrawMode3D();              // Cambiamos el contexto a 3D
-      argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
-      glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
-      glEnable(GL_DEPTH_TEST);
-      glDepthFunc(GL_LEQUAL);
+  //for (int i = 0; i < nobjects; i++) {
+  //  if (objects[i].visible) {   // Si el objeto es visible
+  if (objects[0].visible == 1) {
+    argDrawMode3D();              // Cambiamos el contexto a 3D
+    argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
+    glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
       
-      argConvGlpara(objects[i].patt_trans, gl_para);   // Convertimos la matriz de
-      glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
-      glLoadMatrixd(gl_para);                          // por OpenGL
+    argConvGlpara(objects[0].patt_trans, gl_para);   // Convertimos la matriz de
+    glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
+    glLoadMatrixd(gl_para);                          // por OpenGL
       
-      // Esta ultima parte del codigo es para dibujar el objeto 3D
-      glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
-      glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-      glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
-        glTranslatef(0.0, 0.0, 60.0);
-        glRotatef(90.0, 1.0, 0.0, 0.0);
-        glutSolidTeapot(80.0);
-      glDisable(GL_DEPTH_TEST);
-    }
+    // Esta ultima parte del codigo es para dibujar el objeto 3D
+    glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
+    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+    glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+      glTranslatef(0.0, 0.0, 60.0);
+      glRotatef(90.0, 1.0, 0.0, 0.0);
+      glutSolidTeapot(80.0);
+    glDisable(GL_DEPTH_TEST);
+  }
+
+  
+}
+
+static void draw_sphere( void ) {
+  double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
+  GLfloat material[]        = {1.0, 1.0, 1.0, 1.0};
+  GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
+
+  if (objects[1].visible == 1) {
+    argDrawMode3D();              // Cambiamos el contexto a 3D
+    argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
+    glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+      
+    argConvGlpara(objects[1].patt_trans, gl_para);   // Convertimos la matriz de
+    glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
+    glLoadMatrixd(gl_para);                          // por OpenGL
+      
+    // Esta ultima parte del codigo es para dibujar el objeto 3D
+    material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
+    glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
+    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material);
+      glTranslatef(0.0, 0.0, 60.0);
+      glRotatef(90.0, 1.0, 0.0, 0.0);
+      glColor3ub(0,255,0);
+      glutSolidSphere(45, 100, 100);
+    glDisable(GL_DEPTH_TEST);
   }
 }
 
@@ -123,37 +157,43 @@ static void draw_multi( void ) {
   glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
   glLightfv(GL_LIGHT0, GL_POSITION, light_position);
   
-  if (dmode == 0) {  // Dibujar cubos en marcas
-    for(i=0; i < mMarker->marker_num; i++) {
-      glPushMatrix();   // Guardamos la matriz actual
-      argConvGlpara(mMarker->marker[i].trans, gl_para);   
-      glMultMatrixd(gl_para);               
-      if(mMarker->marker[i].visible < 0) {  // No se ha detectado
-	      material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
-      }
-      else {           // Se ha detectado (ponemos color verde)
-	      material[0] = 0.0; material[1] = 1.0; material[2] = 0.0; 
-      }
-      glMaterialfv(GL_FRONT, GL_AMBIENT, material);
-      glTranslatef(0.0, 0.0, 25.0);
-      glutSolidCube(50.0);
-      glPopMatrix();   // Recuperamos la matriz anterior
+  for(i=0; i < mMarker->marker_num; i++) {
+    glPushMatrix();   // Guardamos la matriz actual
+    argConvGlpara(mMarker->marker[i].trans, gl_para);   
+    glMultMatrixd(gl_para);               
+    if(mMarker->marker[i].visible < 0) {  // No se ha detectado
+	    material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
     }
-  } else { // Dibujar objeto global
+    else {           // Se ha detectado (ponemos color verde)
+	    material[0] = 0.0; material[1] = 1.0; material[2] = 0.0; 
+    }
     glMaterialfv(GL_FRONT, GL_AMBIENT, material);
-    glTranslatef(150.0, -100.0, 60.0);
-    glRotatef(90.0, 1.0, 0.0, 0.0);
-    glutSolidTeapot(90.0);    
+    glTranslatef(0.0, 0.0, 25.0);
+    glutSolidCube(50.0);
+    glPopMatrix();   // Recuperamos la matriz anterior
   }
 
   glDisable(GL_DEPTH_TEST);
 }
 
 // ======== rotacion patron =========================================
+static void cambiar_velocidad(int velocidad) {
+  // Modificar velocidad del juego
+  if (velocidad == 1) {
+
+  } else if (velocidad == 2) {
+
+  } else if (velocidad == 3) {
+
+  } else if (velocidad == 4) {
+
+  }
+}
+
 static void calcular_velocidad( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
-  int velocidad = 1;            // velocidad del juego
+  int velocidad = 0;            // velocidad del juego
   double v[3];
   float angle = 0.0, module = 0.0;
   double m[3][4], m2[3][4];
@@ -194,10 +234,23 @@ static void calcular_velocidad( void ) {
     velocidad = 4;
   }
   
-  printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
+  if(velocidad != 0)
+    printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
 
 }
 
+// Delay function
+void delay(int number_of_seconds) 
+{ 
+    // Converting time into milli_seconds 
+    int milli_seconds = 1000 * number_of_seconds; 
+  
+    // Storing start time 
+    clock_t start_time = clock(); 
+  
+    // looping till required time is not achieved 
+    while (clock() < start_time + milli_seconds); 
+}
 // ======== init ====================================================
 static void init( void ) {
   ARParam  wparam, cparam;   // Parametros intrinsecos de la camara
@@ -216,8 +269,8 @@ static void init( void ) {
   arInitCparam(&cparam);   // Inicializamos la camara con "cparam"
 
   // Inicializamos la lista de objetos
-  addObject("data/bomb.patt", 90.0, c, draw);
-  addObject("data/coin.patt", 90.0, c, draw);
+  addObject("data/bomb.patt", 90.0, c, NULL);
+  addObject("data/coin.patt", 90.0, c, NULL);
   
   // Cargamos el fichero de especificacion multimarca
   if( (mMarker = arMultiReadConfigFile("data/marker.dat")) == NULL )
@@ -250,19 +303,25 @@ static void mainLoop(void) {
 
   // Vemos donde detecta el patron con mayor fiabilidad
   for (i = 0; i < nobjects; i++) {
-    for(j = 0, k = -1; j < marker_num; j++) {
-      if(objects[i].id == marker_info[j].id) {
+    for (j = 0, k = -1; j < marker_num; j++) {
+      if (objects[i].id == marker_info[j].id) {
         if (k == -1) k = j;
-        else if(marker_info[k].cf < marker_info[j].cf) k = j;
+        else if (marker_info[k].cf < marker_info[j].cf) k = j;
       }
     }
 
-    if(k != -1) {   // Si ha detectado el patron en algun sitio...
+    if (k != -1) {   // Si ha detectado el patron en algun sitio...
       objects[i].visible = 1;
       // Obtener transformacion relativa entre la marca y la camara real
       arGetTransMat(&marker_info[k], objects[i].center, objects[i].width, objects[i].patt_trans);
-      draw();       // Dibujamos los objetos de la escena
-    }else {
+      // Dibujar los objetos de la escena
+      if (i == 0) {
+        draw();       // Dibujamos sobre la bomba
+      } else if (i == 1) {
+        draw_sphere(); // Dibujamos sobre la moneda
+      }
+
+    } else {
       objects[i].visible = 0; // El objeto no es visible
     }
   }
