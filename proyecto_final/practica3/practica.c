@@ -21,6 +21,7 @@ int    pattid;            // Identificador unico de la marca
 double patt_trans[3][4];   // Matriz de transformacion de la marca
 ARMultiMarkerInfoT *mMarker;       // Estructura global Multimarca
 int velocidad = 0;            // velocidad del juego
+double distancia;                 // Distancia entre el objeto 0 y 1
 
 void print_error (char *error) {  
   printf("%s\n",error);
@@ -84,8 +85,6 @@ static void draw( void ) {
   GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
   
   /* Pintamos todos los objetos visibles */
-  //for (int i = 0; i < nobjects; i++) {
-  //  if (objects[i].visible) {   // Si el objeto es visible
   if (objects[0].visible == 1) {
     argDrawMode3D();              // Cambiamos el contexto a 3D
     argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
@@ -107,6 +106,19 @@ static void draw( void ) {
     glDisable(GL_DEPTH_TEST);
   }
 
+  // DISTANCIAS
+  double m[3][4], m2[3][4];
+  for(int i = 0; i < mMarker->marker_num; i++) {
+    if (mMarker->marker[i].visible < 0) { // no se detecta la marca
+      //printf("Marca [%d] no detectada\n", i);
+    }
+    else if(mMarker->marker[i].visible == 1 && objects[0].visible == 1) {  // se ha detectado y bomba visible
+      arUtilMatInv(objects[0].patt_trans, m);
+      arUtilMatMul(m, mMarker->marker[i].trans, m2);
+      distancia = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
+      //printf ("Distancia bomba y enemigo multimarca[%d]= %G\n", i, dist01);
+    }
+  }
   
 }
 
@@ -173,15 +185,15 @@ static void draw_multi( void ) {
   glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
   glLightfv(GL_LIGHT0, GL_POSITION, light_position);
   
-  for(i=0; i < mMarker->marker_num; i++) {
+  for (i = 0; i < mMarker->marker_num; i++) {
     glPushMatrix();   // Guardamos la matriz actual
     argConvGlpara(mMarker->marker[i].trans, gl_para);   
     glMultMatrixd(gl_para);               
-    if(mMarker->marker[i].visible < 0) {  // No se ha detectado
+    if (mMarker->marker[i].visible < 0) {  // No se ha detectado
 	    material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
     }
     else {           // Se ha detectado (ponemos color verde)
-	    material[0] = 0.0; material[1] = 1.0; material[2] = 0.0; 
+	    material[0] = 0.0; material[1] = 1.0; material[2] = 0.0;
     }
     glMaterialfv(GL_FRONT, GL_AMBIENT, material);
     glTranslatef(0.0, 0.0, 25.0);
