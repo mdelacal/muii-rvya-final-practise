@@ -10,15 +10,17 @@
 #include <AR/video.h>   
 #include <AR/param.h>   
 #include <AR/ar.h>
-#include <AR/arMulti.h>
-#include <math.h>
-#include <stdio.h>
+#include <AR/arMulti.h> // Multipatrón
+#include <math.h> // Calcular rotaciones
 #include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // ==== Definicion de constantes y variables globales ===============
 int    pattid;            // Identificador unico de la marca
 double patt_trans[3][4];   // Matriz de transformacion de la marca
 ARMultiMarkerInfoT *mMarker;       // Estructura global Multimarca
+int velocidad = 0;            // velocidad del juego
 
 void print_error (char *error) {  
   printf("%s\n",error);
@@ -108,10 +110,15 @@ static void draw( void ) {
   
 }
 
-static void draw_sphere( void ) {
+static void draw_sphere(float angle) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat material[]        = {1.0, 1.0, 1.0, 1.0};
   GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
+  float radius;
+  float color;
+
+  radius = ((angle / velocidad) / 90) * (velocidad * 10) + 10;
+  color = angle / 90;
 
   if (objects[1].visible == 1) {
     argDrawMode3D();              // Cambiamos el contexto a 3D
@@ -124,15 +131,24 @@ static void draw_sphere( void ) {
     glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
     glLoadMatrixd(gl_para);                          // por OpenGL
       
-    // Esta ultima parte del codigo es para dibujar el objeto 3D
-    material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
+    // Dibujamos el objeto con colores entre rojo y verde, según la velocidad
+    if (velocidad == 1) {
+      material[0] = 0.0; material[1] = color; material[2] = 0.0;
+    }else if (velocidad == 2) {
+      material[0] = 0.0; material[1] = color; material[2] = 0.0;
+    }else if (velocidad == 3) {
+      material[0] = color; material[1] = 0.0; material[2] = 0.0;
+    }else if (velocidad == 4) {
+      material[0] = color; material[1] = 0.0; material[2] = 0.0;
+    }
+    
     glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
     glLightfv(GL_LIGHT0, GL_POSITION, light_position);
     glMaterialfv(GL_FRONT, GL_AMBIENT, material);
       glTranslatef(0.0, 0.0, 60.0);
       glRotatef(90.0, 1.0, 0.0, 0.0);
       glColor3ub(0,255,0);
-      glutSolidSphere(45, 100, 100);
+      glutSolidSphere(radius, 100, 100);
     glDisable(GL_DEPTH_TEST);
   }
 }
@@ -193,7 +209,6 @@ static void cambiar_velocidad(int velocidad) {
 static void calcular_velocidad( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
-  int velocidad = 0;            // velocidad del juego
   double v[3];
   float angle = 0.0, module = 0.0;
   double m[3][4], m2[3][4];
@@ -216,7 +231,7 @@ static void calcular_velocidad( void ) {
   v[1] = objects[1].patt_trans[1][0];
   v[2] = objects[1].patt_trans[2][0];
 
-  module = sqrt(pow(v[0],2)+pow(v[1],2)+pow(v[2],2));
+  module = sqrt(pow(v[0],2) + pow(v[1],2) + pow(v[2],2));
   v[0] = v[0]/module;
   v[1] = v[1]/module;
   v[2] = v[2]/module;
@@ -234,6 +249,10 @@ static void calcular_velocidad( void ) {
     velocidad = 4;
   }
   
+  // Una vez tenemos la velocidad calculada y el ángulo, 
+  // dibujamos la esfera de color en función de la velocidad y tamaño en función del ángulo
+  draw_sphere(angle);
+
   if(velocidad != 0)
     printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
 
@@ -317,20 +336,15 @@ static void mainLoop(void) {
       // Dibujar los objetos de la escena
       if (i == 0) {
         draw();       // Dibujamos sobre la bomba
-      } else if (i == 1) {
-        draw_sphere(); // Dibujamos sobre la moneda
+      } else if (i == 1) { 
+        // Detectar rotación para calcular velocidad, y dibujar el objeto
+        calcular_velocidad(); 
       }
 
     } else {
       objects[i].visible = 0; // El objeto no es visible
     }
   }
-
-  // Detectar rotación y calcular velocidad
-  if (objects[1].visible = 1) {
-    calcular_velocidad();
-  }
-  
 
   // Detectar patrón Multimarca
   if(arMultiGetTransMat(marker_info, marker_num, mMarker) > 0) 
@@ -345,6 +359,5 @@ int main(int argc, char **argv) {
   init();                   // Llamada a nuestra funcion de inicio
   arVideoCapStart();        // Creamos un hilo para captura de video
   argMainLoop( NULL, keyboard, mainLoop );   // Asociamos callbacks para las funciones de teclado
-
   return (0);
 }
