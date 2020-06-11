@@ -11,17 +11,26 @@
 #include <AR/param.h>   
 #include <AR/ar.h>
 #include <AR/arMulti.h> // Multipatrón
-#include <math.h> // Calcular rotaciones
+#include <math.h>       // Calcular rotaciones
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <AR/matrix.h>
+
+
 // ==== Definicion de constantes y variables globales ===============
-int    pattid;            // Identificador unico de la marca
-double patt_trans[3][4];   // Matriz de transformacion de la marca
-ARMultiMarkerInfoT *mMarker;       // Estructura global Multimarca
-int velocidad = 0;            // velocidad del juego
+int    pattid;                    // Identificador unico de la marca
+double patt_trans[3][4];          // Matriz de transformacion de la marca
+ARMultiMarkerInfoT *mMarker;      // Estructura global Multimarca
+int velocidad = 0;                // Velocidad del juego
 double distancia;                 // Distancia entre el objeto 0 y 1
+int puntuacion = 0;               // Puntuación obtenida en el juego
+int enemigos = 0;                 // Número de enemigos en el nivel de velocidad actual
+int time_to_respawn = 4;          // Tiempo en el que vuelven a aparecer más enemigos
+
+int game_time = 0;
+
 
 void print_error (char *error) {  
   printf("%s\n",error);
@@ -45,12 +54,13 @@ struct TObject{
   float colour[3];
 };
 
+
+
 struct TObject *objects = NULL;
 int nobjects = 0;
 
 // ==== addObject (Agrega un objeto a la lista de objetos) ==============
-void addObject(char *p, double w, double c[2], void (*drawme)(float,float,float))
-{
+void addObject(char *p, double w, double c[2], void (*drawme)(float,float,float)){
   int patt_id;
 
   if((patt_id = arLoadPatt(p)) < 0)
@@ -129,6 +139,7 @@ static void draw_sphere(float angle) {
   float radius;
   float color;
 
+  // Calculamos el radio y color de la esfera, en función del ángulo y la velocidad de juego
   radius = ((angle / velocidad) / 90) * (velocidad * 10) + 10;
   color = angle / 90;
 
@@ -171,6 +182,7 @@ static void draw_multi( void ) {
   GLfloat material[]        = {1.0, 1.0, 1.0, 1.0};
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
   int i;
+  int j;
   
   argDrawMode3D();              // Cambiamos el contexto a 3D
   argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
@@ -185,6 +197,7 @@ static void draw_multi( void ) {
   glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
   glLightfv(GL_LIGHT0, GL_POSITION, light_position);
   
+  // Renderizado básico, se detecta o no la marca
   for (i = 0; i < mMarker->marker_num; i++) {
     glPushMatrix();   // Guardamos la matriz actual
     argConvGlpara(mMarker->marker[i].trans, gl_para);   
@@ -201,20 +214,50 @@ static void draw_multi( void ) {
     glPopMatrix();   // Recuperamos la matriz anterior
   }
 
+  // Renderizado de enemigos
+  for (i = 0, j = 0; i < mMarker->marker_num && j < enemigos; i++){
+    if (mMarker->marker[i].visible < 0) {  // No se ha detectado
+	    //material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
+    }
+    else {           // Se ha detectado (ponemos color gris)
+	    material[0] = 0.0; material[1] = 0.0; material[2] = 0.0;
+      glPushMatrix();   // Guardamos la matriz actual
+      argConvGlpara(mMarker->marker[i].trans, gl_para);   
+      glMultMatrixd(gl_para); 
+      glMaterialfv(GL_FRONT, GL_AMBIENT, material);
+      glTranslatef(0.0, 0.0, 25.0);
+      glutSolidCube(50.0);
+      glPopMatrix();   // Recuperamos la matriz anterior
+      j++; // Ya hemos renderizado el enemigo
+    }
+  }
+
+  game_time = arUtilTimer();
+  // Calculámos el módulo del tiempo de partida, para generar enemigos cada X tiempo
+  if( fmod(game_time, (double) time_to_respawn) == 0.000000){
+    printf("Timer reset %d\n", game_time);
+    // Generar nuevos enemigos
+    //arUtilTimerReset();
+  }
+
   glDisable(GL_DEPTH_TEST);
 }
 
 // ======== rotacion patron =========================================
-static void cambiar_velocidad(int velocidad) {
-  // Modificar velocidad del juego
+static void cambiar_velocidad( void ) {
+  // Modificar velocidad y nivel del juego
   if (velocidad == 1) {
-
+    enemigos = 2;
+    time_to_respawn = 5;
   } else if (velocidad == 2) {
-
+    enemigos = 2;
+    time_to_respawn = 3;
   } else if (velocidad == 3) {
-
+    enemigos = 4;
+    time_to_respawn = 5;
   } else if (velocidad == 4) {
-
+    enemigos = 4;
+    time_to_respawn = 3;
   }
 }
 
@@ -261,6 +304,9 @@ static void calcular_velocidad( void ) {
     velocidad = 4;
   }
   
+  // Modificamos la configuración del juego
+  cambiar_velocidad();
+
   // Una vez tenemos la velocidad calculada y el ángulo, 
   // dibujamos la esfera de color en función de la velocidad y tamaño en función del ángulo
   draw_sphere(angle);
@@ -271,8 +317,7 @@ static void calcular_velocidad( void ) {
 }
 
 // Delay function
-void delay(int number_of_seconds) 
-{ 
+void delay(int number_of_seconds) { 
     // Converting time into milli_seconds 
     int milli_seconds = 1000 * number_of_seconds; 
   
@@ -296,6 +341,7 @@ static void init( void ) {
   if(arParamLoad("data/webcam.dat", 1, &wparam) < 0)   
     print_error ("Error en carga de parametros de camara\n");
   
+
   arParamChangeSize(&wparam, xsize, ysize, &cparam);
   arInitCparam(&cparam);   // Inicializamos la camara con "cparam"
 
@@ -307,6 +353,8 @@ static void init( void ) {
   if( (mMarker = arMultiReadConfigFile("data/marker.dat")) == NULL )
     print_error("Error en fichero marker.dat\n");
 
+  arUtilTimerReset();      // Reseteamos el tiempo de la partida a 0
+   
   argInit(&cparam, 1.0, 0, 0, 0, 0);   // Abrimos la ventana 
 }
 
@@ -361,6 +409,8 @@ static void mainLoop(void) {
   // Detectar patrón Multimarca
   if(arMultiGetTransMat(marker_info, marker_num, mMarker) > 0) 
     draw_multi();       // Dibujamos los objetos de la escena
+
+  //printf("Duración de la partida: %f segundos\n", arUtilTimer()); // Imprimimos el tiempo de la partida
 
   argSwapBuffers(); // Cambiamos el buffer con lo que tenga dibujado
 }
