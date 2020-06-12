@@ -15,9 +15,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include <AR/matrix.h>
-
+//#include <AR/matrix.h>
 
 // ==== Definicion de constantes y variables globales ===============
 int    pattid;                    // Identificador unico de la marca
@@ -28,8 +26,11 @@ double distancia;                 // Distancia entre el objeto 0 y 1
 int puntuacion = 0;               // Puntuación obtenida en el juego
 int enemigos = 0;                 // Número de enemigos en el nivel de velocidad actual
 int time_to_respawn = 4;          // Tiempo en el que vuelven a aparecer más enemigos
-
 int game_time = 0;
+
+int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
+int current_enemies = 0;
+int max_enemies = 0;              // Número de enemigos máximo en el nivel de velocidad actual
 
 
 void print_error (char *error) {  
@@ -53,8 +54,6 @@ struct TObject{
   char color;
   float colour[3];
 };
-
-
 
 struct TObject *objects = NULL;
 int nobjects = 0;
@@ -88,6 +87,10 @@ static void keyboard(unsigned char key, int x, int y) {
   }
 }
 
+static void spawn_objects ( void ) {
+
+}
+
 // ======== draw ====================================================
 static void draw( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
@@ -110,26 +113,11 @@ static void draw( void ) {
     glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
     glLightfv(GL_LIGHT0, GL_POSITION, light_position);
     glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
-      glTranslatef(0.0, 0.0, 60.0);
-      glRotatef(90.0, 1.0, 0.0, 0.0);
-      glutSolidTeapot(80.0);
+      glTranslatef(0.0, 0.0, 10.0);
+      glRotatef(0.0, 1.0, 0.0, 0.0);
+      glutSolidCone(40, 60, 50, 50);
     glDisable(GL_DEPTH_TEST);
   }
-
-  // DISTANCIAS
-  double m[3][4], m2[3][4];
-  for(int i = 0; i < mMarker->marker_num; i++) {
-    if (mMarker->marker[i].visible < 0) { // no se detecta la marca
-      //printf("Marca [%d] no detectada\n", i);
-    }
-    else if(mMarker->marker[i].visible == 1 && objects[0].visible == 1) {  // se ha detectado y bomba visible
-      arUtilMatInv(objects[0].patt_trans, m);
-      arUtilMatMul(m, mMarker->marker[i].trans, m2);
-      distancia = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
-      //printf ("Distancia bomba y enemigo multimarca[%d]= %G\n", i, dist01);
-    }
-  }
-  
 }
 
 static void draw_sphere(float angle) {
@@ -182,7 +170,7 @@ static void draw_multi( void ) {
   GLfloat material[]        = {1.0, 1.0, 1.0, 1.0};
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
   int i;
-  int j;
+  int respawn_flag = 0;
   
   argDrawMode3D();              // Cambiamos el contexto a 3D
   argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
@@ -196,49 +184,73 @@ static void draw_multi( void ) {
 
   glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
   glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-  
-  // Renderizado básico, se detecta o no la marca
-  for (i = 0; i < mMarker->marker_num; i++) {
+
+  // Renderizado del tablero y enemigos
+  for (i = 0; i < mMarker->marker_num; i++){
+    // No se ha detectado la marca
+    if (mMarker->marker[i].visible < 0) {  
+      // Si el enemigo estaba en el tablero y ahora no se ve, entonces lo hemos eliminado
+      if (state_enemies[i] == 1) {
+        state_enemies[i] = 0; // quitamos al enemigo del tablero y aumentamos los puntos
+        puntuacion++;
+        current_enemies--;
+        printf("Puntuación: %d\n", puntuacion);
+      }
+      // Como no vemos la marca, se dibuja un cubo rojo
+      material[0] = 1.0; material[1] = 0.0; material[2] = 0.0;
+    }
+    // Se ha detectado la marca
+    else {
+      // Si no tenemos el máximo número de enemigos en tablero, probamos a generar uno aleatoriamente
+      if (current_enemies < max_enemies && state_enemies[i] == 0) {
+        // Generación aleatoria JUSTA ESTADÍSTICAMENTE entre todo el tablero de 12 posiciones
+        if((rand() % (12/max_enemies)) == 0) {
+          state_enemies[i] = 1; // Se añade el enemigo al tablero
+          current_enemies++;    // Se incrementa el número de enemigos actuales
+        } 
+      }
+      // Si el enemigo está añadido al tablero, se dibuja un cubo blanco
+      if (state_enemies[i] == 1) {
+        material[0] = 0.0; material[1] = 0.0; material[2] = 0.0;
+      }
+      // Si no se ha añadido al tablero, se dibuja un cubo verde
+      else {
+        material[0] = 0.0; material[1] = 1.0; material[2] = 0.0;
+      }
+    }
+    
+    // Renderizamos los cubos en blanco, verde o rojo
     glPushMatrix();   // Guardamos la matriz actual
     argConvGlpara(mMarker->marker[i].trans, gl_para);   
-    glMultMatrixd(gl_para);               
-    if (mMarker->marker[i].visible < 0) {  // No se ha detectado
-	    material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
-    }
-    else {           // Se ha detectado (ponemos color verde)
-	    material[0] = 0.0; material[1] = 1.0; material[2] = 0.0;
-    }
+    glMultMatrixd(gl_para); 
     glMaterialfv(GL_FRONT, GL_AMBIENT, material);
     glTranslatef(0.0, 0.0, 25.0);
     glutSolidCube(50.0);
     glPopMatrix();   // Recuperamos la matriz anterior
   }
 
-  // Renderizado de enemigos
-  for (i = 0, j = 0; i < mMarker->marker_num && j < enemigos; i++){
-    if (mMarker->marker[i].visible < 0) {  // No se ha detectado
-	    //material[0] = 1.0; material[1] = 0.0; material[2] = 0.0; 
+  // DISTANCIAS
+  double m[3][4], m2[3][4];
+  for(int i = 0; i < mMarker->marker_num; i++) {
+    if (mMarker->marker[i].visible < 0) { // no se detecta la marca
+      //printf("Marca [%d] no detectada, estado previo %d\n", i, mMarker->marker[i].visibleR);
     }
-    else {           // Se ha detectado (ponemos color gris)
-	    material[0] = 0.0; material[1] = 0.0; material[2] = 0.0;
-      glPushMatrix();   // Guardamos la matriz actual
-      argConvGlpara(mMarker->marker[i].trans, gl_para);   
-      glMultMatrixd(gl_para); 
-      glMaterialfv(GL_FRONT, GL_AMBIENT, material);
-      glTranslatef(0.0, 0.0, 25.0);
-      glutSolidCube(50.0);
-      glPopMatrix();   // Recuperamos la matriz anterior
-      j++; // Ya hemos renderizado el enemigo
+    else if(mMarker->marker[i].visible == 1 && objects[0].visible == 1) {  // se ha detectado y bomba visible
+      arUtilMatInv(objects[0].patt_trans, m);
+      //arUtilMatMul(m, mMarker->marker[i].trans, m2);
+      arUtilMatMul(m, mMarker->trans, m2);
+      distancia = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
+      printf ("Distancia bomba y enemigo multimarca[%d] = %G\n", i, distancia);
     }
   }
 
   game_time = arUtilTimer();
   // Calculámos el módulo del tiempo de partida, para generar enemigos cada X tiempo
-  if( fmod(game_time, (double) time_to_respawn) == 0.000000){
-    printf("Timer reset %d\n", game_time);
-    // Generar nuevos enemigos
-    //arUtilTimerReset();
-  }
+  // if( fmod(game_time, (double) time_to_respawn) == 0.000000){
+  //   printf("Timer reset %d\n", game_time);
+  //   // Generar nuevos enemigos
+  //   //arUtilTimerReset();
+  // }
 
   glDisable(GL_DEPTH_TEST);
 }
@@ -247,16 +259,16 @@ static void draw_multi( void ) {
 static void cambiar_velocidad( void ) {
   // Modificar velocidad y nivel del juego
   if (velocidad == 1) {
-    enemigos = 2;
+    max_enemies = 2;
     time_to_respawn = 5;
   } else if (velocidad == 2) {
-    enemigos = 2;
+    max_enemies = 2;
     time_to_respawn = 3;
   } else if (velocidad == 3) {
-    enemigos = 4;
+    max_enemies = 4;
     time_to_respawn = 5;
   } else if (velocidad == 4) {
-    enemigos = 4;
+    max_enemies = 4;
     time_to_respawn = 3;
   }
 }
@@ -410,7 +422,7 @@ static void mainLoop(void) {
   if(arMultiGetTransMat(marker_info, marker_num, mMarker) > 0) 
     draw_multi();       // Dibujamos los objetos de la escena
 
-  //printf("Duración de la partida: %f segundos\n", arUtilTimer()); // Imprimimos el tiempo de la partida
+  printf("Duración de la partida: %f segundos\n", arUtilTimer()); // Imprimimos el tiempo de la partida
 
   argSwapBuffers(); // Cambiamos el buffer con lo que tenga dibujado
 }
