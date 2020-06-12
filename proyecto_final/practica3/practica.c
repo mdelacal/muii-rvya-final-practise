@@ -15,12 +15,16 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>     // Uso de memcpy
 //#include <AR/matrix.h>
 
 // ==== Definicion de constantes y variables globales ===============
 int    pattid;                    // Identificador unico de la marca
 double patt_trans[3][4];          // Matriz de transformacion de la marca
 ARMultiMarkerInfoT *mMarker;      // Estructura global Multimarca
+
+#define N 4                       // Tamano del historico (minimo 2)
+int contAct = 0;                  // Indica si queremos usar el historico
 
 int velocidad = 0;                // Velocidad del juego
 double distancia;                 // Distancia entre el objeto 0 y 1
@@ -31,7 +35,6 @@ float last_respawn_time = 0.0;
 int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
 int current_enemies = 0;          // Número de enemigos actuales en el tablero
 int max_enemies = 0;              // Número de enemigos máximo en el nivel de velocidad actual
-
 
 void print_error (char *error) {  
   printf("%s\n",error);
@@ -50,9 +53,13 @@ struct TObject{
   double width;                         // Ancho del patron
   double center[2];                     // Centro del patron
   double patt_trans[3][4];              // Matriz de transformacion de la marca
+  double patt_aux[3][4];                // Matriz auxiliar de transformación para histórico percepciones
   void (* drawme)(float,float,float);   // Puntero a funcion drawme
   char color;
   float colour[3];
+  double vp_trans[N][3][4]; // Array de historico (N matrices 3x4)
+  int vpi; 
+  int vpe;     // Inicio y fin del historico
 };
 
 struct TObject *objects = NULL;
@@ -74,16 +81,32 @@ void addObject(char *p, double w, double c[2], void (*drawme)(float,float,float)
   objects[nobjects-1].center[0] = c[0];
   objects[nobjects-1].center[1] = c[1];
   objects[nobjects-1].drawme = drawme;
+  objects[nobjects-1].vpi = 0;
+  objects[nobjects-1].vpe = 0;
 
 }
 
 // ======== keyboard ================================================
 static void keyboard(unsigned char key, int x, int y) {
   switch (key) {
-  
   // Recogemos los eventos de pulsaciones de teclas del teclado
   case 0x1B: case 'Q': case 'q':
     cleanup(); break;
+  
+  // Histórico de percepciones
+  case 'H':
+  case 'h':
+    if (contAct)
+    {
+      contAct = 0;
+      printf("Historico Desactivado\n");
+    }
+    else
+    {
+      contAct = 1;
+      printf("Historico Activado\n");
+    }
+    break;
   }
 }
 
@@ -348,6 +371,17 @@ void delay(int number_of_seconds) {
     // looping till required time is not achieved 
     while (clock() < start_time + milli_seconds); 
 }
+
+// ======== patt_mean ===============================================
+// Esta función calcula la media de las matrices 4x3 pasadas en p1 y
+// p2, escribiendo el resultado de la media en p1.
+void patt_mean(double *p1, double *p2)
+{
+  int i;
+  for (i = 0; i < 12; i++)
+    p1[i] = (p1[i] + p2[i]) / 2.0;
+}
+
 // ======== init ====================================================
 static void init( void ) {
   ARParam  wparam, cparam;   // Parametros intrinsecos de la camara
@@ -411,9 +445,34 @@ static void mainLoop(void) {
     }
 
     if (k != -1) {   // Si ha detectado el patron en algun sitio...
+      // Ponemos como visible el objeto detectado
       objects[i].visible = 1;
       // Obtener transformacion relativa entre la marca y la camara real
       arGetTransMat(&marker_info[k], objects[i].center, objects[i].width, objects[i].patt_trans);
+      
+      // HISTORICO DE PERCEPCIONES
+      objects[i].vpe = (objects[i].vpe + 1) % N; // Anadimos nueva percepcion al historico
+      // Si se ha llenado el vector, eliminamos la mas antigua
+      if (objects[i].vpe == objects[i].vpi)
+        objects[i].vpi = (objects[i].vpi + 1) % N;
+      // Copiamos la percepcion al final del vector historico
+      memcpy(objects[i].vp_trans[objects[i].vpe], patt_trans, sizeof(double) * 12);
+
+      if (contAct) { // Si queremos utilizar historico de percepciones
+        for (j = objects[i].vpi; j != objects[i].vpe;)
+        {
+          if (j == objects[i].vpi) // Es la primera matriz (copiamos al auxiliar)
+            memcpy(objects[i].patt_aux, objects[i].vp_trans[objects[i].vpi], sizeof(double) * 12);
+          else // Hacemos la media desde la mas antigua
+            patt_mean((double *)objects[i].patt_aux, (double *)objects[i].vp_trans[j]);
+          j = (j + 1) % N;
+        }
+        // Una vez calculadas las medias, actualizamos en patt_trans
+        memcpy(patt_trans, objects[i].patt_aux, sizeof(double) * 12);
+        //printf("Usando historico!!!\n");
+      } else
+        //printf("Sin historico...\n");
+        
       // Dibujar los objetos de la escena
       if (i == 0) {
         draw();       // Dibujamos sobre la bomba
@@ -423,7 +482,11 @@ static void mainLoop(void) {
       }
 
     } else {
+      // Si falla la deteccion, inicializamos indices del vector
       objects[i].visible = 0; // El objeto no es visible
+      objects[i].vpi = 0;
+      objects[i].vpe = 0;
+      //printf("Reset Historico (fallo de deteccion)\n");
     }
   }
 
