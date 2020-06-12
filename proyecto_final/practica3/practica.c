@@ -21,15 +21,15 @@
 int    pattid;                    // Identificador unico de la marca
 double patt_trans[3][4];          // Matriz de transformacion de la marca
 ARMultiMarkerInfoT *mMarker;      // Estructura global Multimarca
+
 int velocidad = 0;                // Velocidad del juego
 double distancia;                 // Distancia entre el objeto 0 y 1
 int puntuacion = 0;               // Puntuación obtenida en el juego
-int enemigos = 0;                 // Número de enemigos en el nivel de velocidad actual
 int time_to_respawn = 4;          // Tiempo en el que vuelven a aparecer más enemigos
-int game_time = 0;
-
+float game_time = 0.0;
+float last_respawn_time = 0.0;
 int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
-int current_enemies = 0;
+int current_enemies = 0;          // Número de enemigos actuales en el tablero
 int max_enemies = 0;              // Número de enemigos máximo en el nivel de velocidad actual
 
 
@@ -87,14 +87,26 @@ static void keyboard(unsigned char key, int x, int y) {
   }
 }
 
-static void spawn_objects ( void ) {
 
+// Generación aleatoria justa entre todo el tablero de 12 posiciones
+static void spawn_enemies ( int id ) {
+  if((rand() % (12/max_enemies)) == 0) {
+    state_enemies[id] = 1; // Se añade el enemigo al tablero
+    current_enemies++;     // Se incrementa el número de enemigos actuales
+
+    // Guardamos el instante de tiempo en el que llegamos al máximo de enemigos
+    if (current_enemies == max_enemies) {
+      last_respawn_time = game_time;
+      printf("LAST: %f TIME: %f", last_respawn_time, game_time);  
+    }
+  }
 }
 
 // ======== draw ====================================================
 static void draw( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
-  GLfloat mat_ambient[]     = {0.0, 0.0, 1.0, 1.0};
+  // La bomba va cambiando de color
+  GLfloat mat_ambient[]     = {(fmod(arUtilTimer(), (double) 6)/6), 0.0, 0.0, 1.0};
   GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
   
   /* Pintamos todos los objetos visibles */
@@ -201,14 +213,12 @@ static void draw_multi( void ) {
     }
     // Se ha detectado la marca
     else {
-      // Si no tenemos el máximo número de enemigos en tablero, probamos a generar uno aleatoriamente
-      if (current_enemies < max_enemies && state_enemies[i] == 0) {
-        // Generación aleatoria JUSTA ESTADÍSTICAMENTE entre todo el tablero de 12 posiciones
-        if((rand() % (12/max_enemies)) == 0) {
-          state_enemies[i] = 1; // Se añade el enemigo al tablero
-          current_enemies++;    // Se incrementa el número de enemigos actuales
-        } 
-      }
+      // Si no tenemos el máximo número de enemigos en tablero, 
+      // probamos a generar uno aleatoriamente dentro del tiempo de respawn
+      if (current_enemies < max_enemies && state_enemies[i] == 0 
+            && (game_time - last_respawn_time) >= time_to_respawn)
+        spawn_enemies(i);
+      
       // Si el enemigo está añadido al tablero, se dibuja un cubo blanco
       if (state_enemies[i] == 1) {
         material[0] = 0.0; material[1] = 0.0; material[2] = 0.0;
@@ -244,7 +254,6 @@ static void draw_multi( void ) {
     }
   }
 
-  game_time = arUtilTimer();
   // Calculámos el módulo del tiempo de partida, para generar enemigos cada X tiempo
   // if( fmod(game_time, (double) time_to_respawn) == 0.000000){
   //   printf("Timer reset %d\n", game_time);
@@ -262,14 +271,14 @@ static void cambiar_velocidad( void ) {
     max_enemies = 2;
     time_to_respawn = 5;
   } else if (velocidad == 2) {
-    max_enemies = 2;
-    time_to_respawn = 3;
+    max_enemies = 3;
+    time_to_respawn = 5;
   } else if (velocidad == 3) {
     max_enemies = 4;
     time_to_respawn = 5;
   } else if (velocidad == 4) {
-    max_enemies = 4;
-    time_to_respawn = 3;
+    max_enemies = 6;
+    time_to_respawn = 5;
   }
 }
 
@@ -422,7 +431,8 @@ static void mainLoop(void) {
   if(arMultiGetTransMat(marker_info, marker_num, mMarker) > 0) 
     draw_multi();       // Dibujamos los objetos de la escena
 
-  printf("Duración de la partida: %f segundos\n", arUtilTimer()); // Imprimimos el tiempo de la partida
+  game_time = arUtilTimer();
+  printf("Duración de la partida: %f segundos\n", game_time); // Imprimimos el tiempo de la partida
 
   argSwapBuffers(); // Cambiamos el buffer con lo que tenga dibujado
 }
