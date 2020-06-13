@@ -19,8 +19,8 @@
 //#include <AR/matrix.h>
 
 // ==== Definicion de constantes y variables globales ===============
-int    pattid;                    // Identificador unico de la marca
-double patt_trans[3][4];          // Matriz de transformacion de la marca
+//int    pattid;                    // Identificador unico de la marca
+//double patt_trans[3][4];          // Matriz de transformacion de la marca
 ARMultiMarkerInfoT *mMarker;      // Estructura global Multimarca
 
 #define N 4                       // Tamano del historico (minimo 2)
@@ -55,8 +55,6 @@ struct TObject{
   double patt_trans[3][4];              // Matriz de transformacion de la marca
   double patt_aux[3][4];                // Matriz auxiliar de transformación para histórico percepciones
   void (* drawme)(float,float,float);   // Puntero a funcion drawme
-  char color;
-  float colour[3];
   double vp_trans[N][3][4]; // Array de historico (N matrices 3x4)
   int vpi; 
   int vpe;     // Inicio y fin del historico
@@ -372,16 +370,6 @@ void delay(int number_of_seconds) {
     while (clock() < start_time + milli_seconds); 
 }
 
-// ======== patt_mean ===============================================
-// Esta función calcula la media de las matrices 4x3 pasadas en p1 y
-// p2, escribiendo el resultado de la media en p1.
-void patt_mean(double *p1, double *p2)
-{
-  int i;
-  for (i = 0; i < 12; i++)
-    p1[i] = (p1[i] + p2[i]) / 2.0;
-}
-
 // ======== init ====================================================
 static void init( void ) {
   ARParam  wparam, cparam;   // Parametros intrinsecos de la camara
@@ -411,6 +399,16 @@ static void init( void ) {
   arUtilTimerReset();      // Reseteamos el tiempo de la partida a 0
    
   argInit(&cparam, 1.0, 0, 0, 0, 0);   // Abrimos la ventana 
+}
+
+// ======== patt_mean ===============================================
+// Esta función calcula la media de las matrices 4x3 pasadas en p1 y
+// p2, escribiendo el resultado de la media en p1.
+void patt_mean(double *p1, double *p2)
+{
+  int i;
+  for (i = 0; i < 12; i++)
+    p1[i] = (p1[i] + p2[i]) / 2.0;
 }
 
 // ======== mainLoop ================================================
@@ -456,7 +454,7 @@ static void mainLoop(void) {
       if (objects[i].vpe == objects[i].vpi)
         objects[i].vpi = (objects[i].vpi + 1) % N;
       // Copiamos la percepcion al final del vector historico
-      memcpy(objects[i].vp_trans[objects[i].vpe], patt_trans, sizeof(double) * 12);
+      memcpy(objects[i].vp_trans[objects[i].vpe], objects[i].patt_trans, sizeof(double) * 12);
 
       if (contAct) { // Si queremos utilizar historico de percepciones
         for (j = objects[i].vpi; j != objects[i].vpe;)
@@ -468,11 +466,12 @@ static void mainLoop(void) {
           j = (j + 1) % N;
         }
         // Una vez calculadas las medias, actualizamos en patt_trans
-        memcpy(patt_trans, objects[i].patt_aux, sizeof(double) * 12);
-        //printf("Usando historico!!!\n");
-      } else
-        //printf("Sin historico...\n");
-        
+        memcpy(objects[i].patt_trans, objects[i].patt_aux, sizeof(double) * 12);
+        printf("Usando historico!!!\n");
+      } else {
+          printf("Sin historico...\n");
+      }
+       
       // Dibujar los objetos de la escena
       if (i == 0) {
         draw();       // Dibujamos sobre la bomba
