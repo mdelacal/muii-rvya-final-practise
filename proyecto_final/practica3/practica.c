@@ -34,6 +34,7 @@ int time_to_respawn = 0;          // Tiempo en el que vuelven a aparecer más en
 float last_respawn_time = 0.0;    // Último instante de respawn de enemigos
 int time_to_bomb = 0;             // Tiempo en el que podemos volver a utilizar la bomba
 float last_bomb_time = 0.0;       // Último instante de lanzamiento de la bomba
+int flag_bomb = 0;               // Bomba habilitada = 1; deshabilitada 0 
 
 int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
 int current_enemies = 0;          // Número de enemigos actuales en el tablero
@@ -122,8 +123,21 @@ static void spawn_enemy(int id) {
 // ======== draw cone & sphere ======================================
 static void draw_cone( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
+  double color = 0.0; 
+
+  // Calculamos el color de la bomba
+  if(speed != 0){ // La velocidad de juego se ha elegido
+    color = (game_time - last_bomb_time) / time_to_bomb;
+    // Comprobamos si la bomba se ha cargado
+    if (color >= 1.0 && flag_bomb == 0) {
+      color = 1.0;
+      flag_bomb = 1;
+      printf("¡Bomba cargada! Acerca la marca al tablero para eliminar a los enemigos\n");
+    }
+  }
+  
   // La bomba va cambiando de color, de blanco a rojo
-  GLfloat mat_ambient[]     = {(fmod(arUtilTimer(), (double) 6) / 6), 0.0, 0.0, 1.0};
+  GLfloat mat_ambient[]     = {color, 0.0, 0.0, 1.0};
   GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
   
   argDrawMode3D();              // Cambiamos el contexto a 3D
@@ -199,10 +213,9 @@ static void throw_bomb() {
     }
   }
 
-  // Para evitar trampas, tras lanzar una bomba para eliminar enemigos,
-  // actualizamos el tiempo de respawn de los enemigos
-  last_respawn_time = game_time;
+  // Actualizamos el tiempo de última bomba lanzada y la deshabilitamos
   last_bomb_time = game_time;
+  flag_bomb = 0;
 
   printf("----------------------------------------------------------\n");
   printf("Puntación tras lanzar la bomba: %d\n", game_score);
@@ -282,14 +295,15 @@ static void draw_multi( void ) {
     
     // Si la bomba se encuentra cerca del tablero y se puede utilizar la bomba,
     // tiramos una bomba para eliminar a los enemigos
-    if(distance <= 400 && (game_time - last_bomb_time) >= time_to_bomb) {
+    if(distance <= 150 && (game_time - last_bomb_time) >= time_to_bomb) {
       //printf("Distancia bomba y enemigo multimarca = %G\n", distance);
       throw_bomb();
     }
-    else if ((game_time - last_bomb_time) < time_to_bomb) {
+    else if ((game_time - last_bomb_time) < time_to_bomb && distance <= 200) {
       //printf("Espera %fs para lanzar la bomba\n", time_to_bomb - (game_time - last_bomb_time));
       // Advertencia al jugador para que quite la marca de la bomba
       //printf("¡¡Quita la bomba para más respawns de enemigos!!\n");
+      
       // Para evitar que el jugador use automáticamente la bomba, tendrá que quitarla y haya respawn de nuevos enemigos
       last_respawn_time = game_time;  
     }
