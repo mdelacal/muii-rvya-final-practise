@@ -4,7 +4,9 @@
 *  Máster Universitario en Ingeniería Informática *
 ***************************************************/
 
-/* LIBRERIAS AR */
+/* LIBRERIAS */
+#include <stdio.h>
+#include <stdlib.h>
 #include <GL/glut.h>    
 #include <AR/gsub.h>    
 #include <AR/video.h>   
@@ -12,26 +14,23 @@
 #include <AR/ar.h>
 #include <AR/arMulti.h> // Multipatrón
 #include <math.h>       // Calcular rotaciones
-#include <time.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>     // Uso de memcpy
 
 // ==== Definicion de constantes y variables globales ===============
 ARMultiMarkerInfoT *mMarker;      // Estructura global Multimarca
 #define N 4                       // Tamano del historico (minimo 2)
 int contAct = 0;                  // Indica si queremos usar el historico; 0: NO / 1: SI
-int velocidad = 1;                // Velocidad del juego
+int velocidad = 0;                // Velocidad del juego
+int velocidad_old = -1;           // Velocidad del juego del frame anterior
 double distancia;                 // Distancia entre el objeto bomba y el multipatrón
+float angle = 0.0;                // Ángulo de rotación de la marca de la moneda
 int puntuacion = 0;               // Puntuación obtenida en el juego
-int time_to_respawn = 4;          // Tiempo en el que vuelven a aparecer más enemigos
+int time_to_respawn = 0;          // Tiempo en el que vuelven a aparecer más enemigos
 float game_time = 0.0;            // Duración de la partida
 float last_respawn_time = 0.0;    // Último instante de respawn de enemigos
 int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
 int current_enemies = 0;          // Número de enemigos actuales en el tablero
 int max_enemies = 0;              // Número de enemigos máximo en el nivel de velocidad actual
-
-
 
 // ======== cleanup & error =========================================
 static void cleanup(void) {   // Libera recursos al salir ...
@@ -139,7 +138,7 @@ static void draw_cone( void ) {
   glDisable(GL_DEPTH_TEST);
 }
 
-static void draw_sphere(float angle) {
+static void draw_sphere() {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat material[]        = {1.0, 1.0, 1.0, 1.0};
   GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
@@ -192,8 +191,10 @@ static void throw_bomb() {
       printf("Bomba lanzada sobre el enemigo %d\n", i);
     }
   }
+
   printf("¡¡Quita la bomba para más respawns de enemigos!!\n");
   printf("Puntación tras bomba: %d\n", puntuacion);
+  
   // Para evitar trampas, tras lanzar una bomba para eliminar enemigos,
   // actualizamos el tiempo de respawn de los enemigos
   last_respawn_time = game_time;
@@ -296,11 +297,11 @@ static void cambiar_velocidad( void ) {
   }
 }
 
-static void calcular_velocidad( void ) {
+static void calcular_velocidad() {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
   double v[3];
-  float angle = 0.0, module = 0.0;
+  float module = 0.0;
   double m[3][4], m2[3][4];
   argDrawMode3D();              // Cambiamos el contexto a 3D
   argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
@@ -337,15 +338,6 @@ static void calcular_velocidad( void ) {
   else if (angle > 270 && angle <= 360)
     velocidad = 4;
   
-  // Tras calcular la velocidad del juego, modificamos la configuración del juego
-  cambiar_velocidad();
-
-  // Una vez tenemos la velocidad calculada y el ángulo, 
-  // dibujamos la esfera de color en función de la velocidad y tamaño en función del ángulo
-  draw_sphere(angle);
-
-  if(velocidad != 0)
-    printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
 }
 
 // ======== init ====================================================
@@ -451,11 +443,22 @@ static void mainLoop(void) {
       }
        
       // Dibujar los objetos de la escena
-      if (i == 0) {
+      if (i == 0)          // Si es el objeto BOMBA
         draw_cone();       // Dibujamos un cono sobre la bomba
-      } else if (i == 1) { 
-        // Detectar rotación para calcular velocidad, y dibujar el objeto
-        calcular_velocidad(); 
+      else if (i == 1) {   // Si es el objeto MONEDA  
+        // ROTACION: Calculamos el ángulo de rotación de la marca
+        calcular_velocidad();
+        // Tras calcular la velocidad del juego, modificamos la configuración del juego
+        cambiar_velocidad();
+
+        // Mostramos la velocidad de juego actual, si ha cambiado respecto al anterior frame
+        if(velocidad != 0 && velocidad_old != velocidad){
+          //printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
+          printf("¡Cambio de velocidad! VELOCIDAD: %d\n", velocidad);
+          velocidad_old = velocidad;
+        }
+
+        draw_sphere();
       }
 
     } else {
