@@ -16,37 +16,33 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>     // Uso de memcpy
-//#include <AR/matrix.h>
 
 // ==== Definicion de constantes y variables globales ===============
-//int    pattid;                    // Identificador unico de la marca
-//double patt_trans[3][4];          // Matriz de transformacion de la marca
 ARMultiMarkerInfoT *mMarker;      // Estructura global Multimarca
-
 #define N 4                       // Tamano del historico (minimo 2)
-int contAct = 0;                  // Indica si queremos usar el historico
-
-int velocidad = 0;                // Velocidad del juego
-double distancia;                 // Distancia entre el objeto 0 y 1
+int contAct = 0;                  // Indica si queremos usar el historico; 0: NO / 1: SI
+int velocidad = 1;                // Velocidad del juego
+double distancia;                 // Distancia entre el objeto bomba y el multipatrón
 int puntuacion = 0;               // Puntuación obtenida en el juego
 int time_to_respawn = 4;          // Tiempo en el que vuelven a aparecer más enemigos
-float game_time = 0.0;
-float last_respawn_time = 0.0;
+float game_time = 0.0;            // Duración de la partida
+float last_respawn_time = 0.0;    // Último instante de respawn de enemigos
 int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
 int current_enemies = 0;          // Número de enemigos actuales en el tablero
 int max_enemies = 0;              // Número de enemigos máximo en el nivel de velocidad actual
 
-void print_error (char *error) {  
-  printf("%s\n",error);
-  exit(0); 
-}
 
-// ======== cleanup =================================================
+
+// ======== cleanup & error =========================================
 static void cleanup(void) {   // Libera recursos al salir ...
   arVideoCapStop();   arVideoClose();   argCleanup();   exit(0);
 }
 
-// ==== Definicion de estructuras ===================================
+void print_error (char *error) {  
+  printf("%s\n",error); exit(0); 
+}
+
+// ==== Definición de estructuras ===================================
 struct TObject{
   int id;                               // Identificador unico de la marca
   int visible;                          // Es visible el objeto
@@ -55,13 +51,13 @@ struct TObject{
   double patt_trans[3][4];              // Matriz de transformacion de la marca
   double patt_aux[3][4];                // Matriz auxiliar de transformación para histórico percepciones
   void (* drawme)(float,float,float);   // Puntero a funcion drawme
-  double vp_trans[N][3][4]; // Array de historico (N matrices 3x4)
-  int vpi; 
-  int vpe;     // Inicio y fin del historico
+  double vp_trans[N][3][4];             // Array de historico (N matrices 3x4)
+  int vpi;  // Inicio del histórico
+  int vpe;  // Fin del histórico                            
 };
 
-struct TObject *objects = NULL;
-int nobjects = 0;
+struct TObject *objects = NULL;   // Estructura donde se guardan los objetos cargados
+int nobjects = 0;                 // Número de objetos/patrones cargados
 
 // ==== addObject (Agrega un objeto a la lista de objetos) ==============
 void addObject(char *p, double w, double c[2], void (*drawme)(float,float,float)){
@@ -81,12 +77,12 @@ void addObject(char *p, double w, double c[2], void (*drawme)(float,float,float)
   objects[nobjects-1].drawme = drawme;
   objects[nobjects-1].vpi = 0;
   objects[nobjects-1].vpe = 0;
-
 }
 
 // ======== keyboard ================================================
 static void keyboard(unsigned char key, int x, int y) {
   switch (key) {
+  
   // Recogemos los eventos de pulsaciones de teclas del teclado
   case 0x1B: case 'Q': case 'q':
     cleanup(); break;
@@ -94,62 +90,53 @@ static void keyboard(unsigned char key, int x, int y) {
   // Histórico de percepciones
   case 'H':
   case 'h':
-    if (contAct)
-    {
-      contAct = 0;
-      printf("Historico Desactivado\n");
+    if (contAct) {
+      contAct = 0; printf("Historico Desactivado\n");
     }
-    else
-    {
-      contAct = 1;
-      printf("Historico Activado\n");
+    else {
+      contAct = 1; printf("Historico Activado\n");
     }
     break;
   }
 }
 
-
-// Generación aleatoria justa entre todo el tablero de 12 posiciones
-static void spawn_enemies ( int id ) {
+// Generación aleatoria justa entre todo el tablero de 12 posiciones, en una posición dada
+static void spawn_enemy(int id) {
   if((rand() % (12/max_enemies)) == 0) {
     state_enemies[id] = 1; // Se añade el enemigo al tablero
     current_enemies++;     // Se incrementa el número de enemigos actuales
 
-    // Guardamos el instante de tiempo en el que llegamos al máximo de enemigos
+    // Guardamos el instante de tiempo en el que llegamos al máximo de enemigos en el tablero
     if (current_enemies == max_enemies) {
       last_respawn_time = game_time;
     }
   }
 }
 
-// ======== draw ====================================================
-static void draw( void ) {
+// ======== draw cone & sphere ======================================
+static void draw_cone( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
-  // La bomba va cambiando de color
-  GLfloat mat_ambient[]     = {(fmod(arUtilTimer(), (double) 6)/6), 0.0, 0.0, 1.0};
+  // La bomba va cambiando de color, de blanco a rojo
+  GLfloat mat_ambient[]     = {(fmod(arUtilTimer(), (double) 6) / 6), 0.0, 0.0, 1.0};
   GLfloat light_position[]  = {100.0, -200.0, 200.0, 0.0};
   
-  /* Pintamos todos los objetos visibles */
-  if (objects[0].visible == 1) {
-    argDrawMode3D();              // Cambiamos el contexto a 3D
-    argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
-    glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-      
-    argConvGlpara(objects[0].patt_trans, gl_para);   // Convertimos la matriz de
-    glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
-    glLoadMatrixd(gl_para);                          // por OpenGL
-      
-    // Esta ultima parte del codigo es para dibujar el objeto 3D
-    glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-    glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
-      glTranslatef(0.0, 0.0, 10.0);
-      glRotatef(0.0, 1.0, 0.0, 0.0);
-      glutSolidCone(40, 60, 50, 50);
-    glDisable(GL_DEPTH_TEST);
-  }
+  argDrawMode3D();              // Cambiamos el contexto a 3D
+  argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
+  glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
+    
+  argConvGlpara(objects[0].patt_trans, gl_para);   // Convertimos la matriz de
+  glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
+  glLoadMatrixd(gl_para);                          // por OpenGL
+    
+  glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
+  glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+  glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+    glTranslatef(0.0, 0.0, 10.0);
+    glRotatef(0.0, 1.0, 0.0, 0.0);
+    glutSolidCone(40, 60, 50, 50);
+  glDisable(GL_DEPTH_TEST);
 }
 
 static void draw_sphere(float angle) {
@@ -163,42 +150,40 @@ static void draw_sphere(float angle) {
   radius = ((angle / velocidad) / 90) * (velocidad * 10) + 10;
   color = angle / 90;
 
-  if (objects[1].visible == 1) {
-    argDrawMode3D();              // Cambiamos el contexto a 3D
-    argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
-    glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-      
-    argConvGlpara(objects[1].patt_trans, gl_para);   // Convertimos la matriz de
-    glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
-    glLoadMatrixd(gl_para);                          // por OpenGL
-      
-    // Dibujamos el objeto con colores entre rojo y verde, según la velocidad
-    if (velocidad == 1) {
-      material[0] = 0.0; material[1] = color; material[2] = 0.0;
-    }else if (velocidad == 2) {
-      material[0] = 0.0; material[1] = color; material[2] = 0.0;
-    }else if (velocidad == 3) {
-      material[0] = color; material[1] = 0.0; material[2] = 0.0;
-    }else if (velocidad == 4) {
-      material[0] = color; material[1] = 0.0; material[2] = 0.0;
-    }
+  argDrawMode3D();              // Cambiamos el contexto a 3D
+  argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
+  glClear(GL_DEPTH_BUFFER_BIT); // Limpiamos buffer de profundidad
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
     
-    glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
-    glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-    glMaterialfv(GL_FRONT, GL_AMBIENT, material);
-      glTranslatef(0.0, 0.0, 60.0);
-      glRotatef(90.0, 1.0, 0.0, 0.0);
-      glColor3ub(0,255,0);
-      glutSolidSphere(radius, 100, 100);
-    glDisable(GL_DEPTH_TEST);
+  argConvGlpara(objects[1].patt_trans, gl_para);   // Convertimos la matriz de
+  glMatrixMode(GL_MODELVIEW);                      // la marca para ser usada
+  glLoadMatrixd(gl_para);                          // por OpenGL
+    
+  // Dibujamos el objeto con colores entre rojo y verde, según la velocidad de la partida
+  if (velocidad == 1) {
+    material[0] = 0.0; material[1] = color; material[2] = 0.0;
+  }else if (velocidad == 2) {
+    material[0] = 0.0; material[1] = color; material[2] = 0.0;
+  }else if (velocidad == 3) {
+    material[0] = color; material[1] = 0.0; material[2] = 0.0;
+  }else if (velocidad == 4) {
+    material[0] = color; material[1] = 0.0; material[2] = 0.0;
   }
+  
+  glEnable(GL_LIGHTING);  glEnable(GL_LIGHT0);
+  glLightfv(GL_LIGHT0, GL_POSITION, light_position);
+  glMaterialfv(GL_FRONT, GL_AMBIENT, material);
+    glTranslatef(0.0, 0.0, 60.0);
+    glRotatef(90.0, 1.0, 0.0, 0.0);
+    glColor3ub(0,255,0);
+    glutSolidSphere(radius, 100, 100);
+  glDisable(GL_DEPTH_TEST);
 }
 
-// ======== draw multimarca =========================================
-// Añadimos puntuación y quitamos todos los enemigos del tablero
+// Lanzamiento de la bomba sobre los enemigos del tablero
 static void throw_bomb() {
+  // Añadimos puntuación y quitamos todos los enemigos del tablero
   for (int i = 0; i < mMarker->marker_num; i++) {
     if (state_enemies[i] == 1) {
       state_enemies[i] = 0;
@@ -212,15 +197,15 @@ static void throw_bomb() {
   // Para evitar trampas, tras lanzar una bomba para eliminar enemigos,
   // actualizamos el tiempo de respawn de los enemigos
   last_respawn_time = game_time;
-  
 }
 
+// ======== draw multimarca =========================================
 static void draw_multi( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat material[]        = {1.0, 1.0, 1.0, 1.0};
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
   int i;
-  int respawn_flag = 0;
+  double m[3][4], m2[3][4];
   
   argDrawMode3D();              // Cambiamos el contexto a 3D
   argDraw3dCamera(0, 0);        // Y la vista de la camara a 3D
@@ -255,7 +240,7 @@ static void draw_multi( void ) {
       // probamos a generar uno aleatoriamente dentro del tiempo de respawn
       if (current_enemies < max_enemies && state_enemies[i] == 0 
             && (game_time - last_respawn_time) >= time_to_respawn)
-        spawn_enemies(i);
+        spawn_enemy(i);
       
       // Si el enemigo está añadido al tablero, se dibuja un cubo blanco
       if (state_enemies[i] == 1) {
@@ -277,14 +262,13 @@ static void draw_multi( void ) {
     glPopMatrix();   // Recuperamos la matriz anterior
   }
 
-  // DISTANCIAS
-  double m[3][4], m2[3][4];
-  if(objects[0].visible == 1) {  // se ha detectado la bomba
+  // POSICIONES RELATIVAS: Cálculo de distancias para lanzar la bomba
+  if(objects[0].visible == 1) {  // se ha detectado la bomba en el frame actual
     arUtilMatInv(objects[0].patt_trans, m);
     arUtilMatMul(m, mMarker->trans, m2);
     distancia = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
     
-    // Tiramos una bomba para eliminar a los enemigos
+    // Si la bomba se encuentra cerca del tablero, tiramos una bomba para eliminar a los enemigos
     if(distancia <= 400) {
       //printf ("Distancia bomba y enemigo multimarca = %G\n", distancia);
       throw_bomb();
@@ -324,7 +308,6 @@ static void calcular_velocidad( void ) {
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
 
-  // Al ser visible el objeto COIN
   argConvGlpara(objects[1].patt_trans, gl_para);
   glMatrixMode(GL_MODELVIEW);
   glLoadMatrixd(gl_para);   // Cargamos su matriz de transf.
@@ -345,17 +328,16 @@ static void calcular_velocidad( void ) {
   angle = acos (v[0]) * 57.2958;   // Sexagesimales! * (180/PI)
   angle = angle * 2;//de 180 grados pasamos a tener 360 grados
 
-  if (angle <= 90) {
+  if (angle <= 90)
     velocidad = 1;
-  } else if (angle > 90 && angle <= 180) {
+  else if (angle > 90 && angle <= 180)
     velocidad = 2;
-  } else if (angle > 180 && angle <= 270) {
+  else if (angle > 180 && angle <= 270)
     velocidad = 3;
-  } else if (angle > 270 && angle <= 360) {
+  else if (angle > 270 && angle <= 360)
     velocidad = 4;
-  }
   
-  // Modificamos la configuración del juego
+  // Tras calcular la velocidad del juego, modificamos la configuración del juego
   cambiar_velocidad();
 
   // Una vez tenemos la velocidad calculada y el ángulo, 
@@ -364,7 +346,6 @@ static void calcular_velocidad( void ) {
 
   if(velocidad != 0)
     printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
-
 }
 
 // ======== init ====================================================
@@ -471,7 +452,7 @@ static void mainLoop(void) {
        
       // Dibujar los objetos de la escena
       if (i == 0) {
-        draw();       // Dibujamos un cono sobre la bomba
+        draw_cone();       // Dibujamos un cono sobre la bomba
       } else if (i == 1) { 
         // Detectar rotación para calcular velocidad, y dibujar el objeto
         calcular_velocidad(); 
