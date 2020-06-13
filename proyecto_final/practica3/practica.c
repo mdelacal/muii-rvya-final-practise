@@ -118,7 +118,6 @@ static void spawn_enemies ( int id ) {
     // Guardamos el instante de tiempo en el que llegamos al máximo de enemigos
     if (current_enemies == max_enemies) {
       last_respawn_time = game_time;
-      printf("LAST: %f TIME: %f", last_respawn_time, game_time);  
     }
   }
 }
@@ -198,6 +197,24 @@ static void draw_sphere(float angle) {
 }
 
 // ======== draw multimarca =========================================
+// Añadimos puntuación y quitamos todos los enemigos del tablero
+static void throw_bomb() {
+  for (int i = 0; i < mMarker->marker_num; i++) {
+    if (state_enemies[i] == 1) {
+      state_enemies[i] = 0;
+      puntuacion++;
+      current_enemies--;
+      printf("Bomba lanzada sobre el enemigo %d\n", i);
+    }
+  }
+  printf("¡¡Quita la bomba para más respawns de enemigos!!\n");
+  printf("Puntación tras bomba: %d\n", puntuacion);
+  // Para evitar trampas, tras lanzar una bomba para eliminar enemigos,
+  // actualizamos el tiempo de respawn de los enemigos
+  last_respawn_time = game_time;
+  
+}
+
 static void draw_multi( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat material[]        = {1.0, 1.0, 1.0, 1.0};
@@ -262,25 +279,17 @@ static void draw_multi( void ) {
 
   // DISTANCIAS
   double m[3][4], m2[3][4];
-  for(int i = 0; i < mMarker->marker_num; i++) {
-    if (mMarker->marker[i].visible < 0) { // no se detecta la marca
-      //printf("Marca [%d] no detectada, estado previo %d\n", i, mMarker->marker[i].visibleR);
-    }
-    else if(mMarker->marker[i].visible == 1 && objects[0].visible == 1) {  // se ha detectado y bomba visible
-      arUtilMatInv(objects[0].patt_trans, m);
-      //arUtilMatMul(m, mMarker->marker[i].trans, m2);
-      arUtilMatMul(m, mMarker->trans, m2);
-      distancia = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
-      printf ("Distancia bomba y enemigo multimarca[%d] = %G\n", i, distancia);
+  if(objects[0].visible == 1) {  // se ha detectado la bomba
+    arUtilMatInv(objects[0].patt_trans, m);
+    arUtilMatMul(m, mMarker->trans, m2);
+    distancia = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
+    
+    // Tiramos una bomba para eliminar a los enemigos
+    if(distancia <= 400) {
+      //printf ("Distancia bomba y enemigo multimarca = %G\n", distancia);
+      throw_bomb();
     }
   }
-
-  // Calculámos el módulo del tiempo de partida, para generar enemigos cada X tiempo
-  // if( fmod(game_time, (double) time_to_respawn) == 0.000000){
-  //   printf("Timer reset %d\n", game_time);
-  //   // Generar nuevos enemigos
-  //   //arUtilTimerReset();
-  // }
 
   glDisable(GL_DEPTH_TEST);
 }
@@ -356,18 +365,6 @@ static void calcular_velocidad( void ) {
   if(velocidad != 0)
     printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
 
-}
-
-// Delay function
-void delay(int number_of_seconds) { 
-    // Converting time into milli_seconds 
-    int milli_seconds = 1000 * number_of_seconds; 
-  
-    // Storing start time 
-    clock_t start_time = clock(); 
-  
-    // looping till required time is not achieved 
-    while (clock() < start_time + milli_seconds); 
 }
 
 // ======== init ====================================================
@@ -448,7 +445,7 @@ static void mainLoop(void) {
       // Obtener transformacion relativa entre la marca y la camara real
       arGetTransMat(&marker_info[k], objects[i].center, objects[i].width, objects[i].patt_trans);
       
-      // HISTORICO DE PERCEPCIONES
+      // HISTORICO DE PERCEPCIONES MULTIOBJETO
       objects[i].vpe = (objects[i].vpe + 1) % N; // Anadimos nueva percepcion al historico
       // Si se ha llenado el vector, eliminamos la mas antigua
       if (objects[i].vpe == objects[i].vpi)
@@ -467,25 +464,24 @@ static void mainLoop(void) {
         }
         // Una vez calculadas las medias, actualizamos en patt_trans
         memcpy(objects[i].patt_trans, objects[i].patt_aux, sizeof(double) * 12);
-        printf("Usando historico!!!\n");
+        //printf("Usando historico!!!\n");
       } else {
-          printf("Sin historico...\n");
+          //printf("Sin historico...\n");
       }
        
       // Dibujar los objetos de la escena
       if (i == 0) {
-        draw();       // Dibujamos sobre la bomba
+        draw();       // Dibujamos un cono sobre la bomba
       } else if (i == 1) { 
         // Detectar rotación para calcular velocidad, y dibujar el objeto
         calcular_velocidad(); 
       }
 
     } else {
-      // Si falla la deteccion, inicializamos indices del vector
+      // Si falla la deteccion, inicializamos indices del vector haciendo un reset del histórico
       objects[i].visible = 0; // El objeto no es visible
       objects[i].vpi = 0;
       objects[i].vpe = 0;
-      //printf("Reset Historico (fallo de deteccion)\n");
     }
   }
 
@@ -494,7 +490,7 @@ static void mainLoop(void) {
     draw_multi();       // Dibujamos los objetos de la escena
 
   game_time = arUtilTimer();
-  printf("Duración de la partida: %f segundos\n", game_time); // Imprimimos el tiempo de la partida
+  //printf("Duración de la partida: %f segundos\n", game_time); // Imprimimos el tiempo de la partida
 
   argSwapBuffers(); // Cambiamos el buffer con lo que tenga dibujado
 }
