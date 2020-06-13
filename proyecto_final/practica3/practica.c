@@ -12,22 +12,29 @@
 #include <AR/video.h>   
 #include <AR/param.h>   
 #include <AR/ar.h>
-#include <AR/arMulti.h> // Multipatrón
-#include <math.h>       // Calcular rotaciones
-#include <string.h>     // Uso de memcpy
+#include <AR/arMulti.h>   // Multipatrón
+#include <math.h>         // Calcular rotaciones
+#include <string.h>       // Uso de memcpy
 
 // ==== Definicion de constantes y variables globales ===============
 ARMultiMarkerInfoT *mMarker;      // Estructura global Multimarca
 #define N 4                       // Tamano del historico (minimo 2)
 int contAct = 0;                  // Indica si queremos usar el historico; 0: NO / 1: SI
-int velocidad = 0;                // Velocidad del juego
-int velocidad_old = -1;           // Velocidad del juego del frame anterior
-double distancia;                 // Distancia entre el objeto bomba y el multipatrón
+
+int speed = 0;                    // Velocidad del juego
+int speed_old = -1;               // Velocidad del juego del frame anterior
+
+double distance = 0.0;            // Distancia entre el objeto bomba y el multipatrón
 float angle = 0.0;                // Ángulo de rotación de la marca de la moneda
-int puntuacion = 0;               // Puntuación obtenida en el juego
-int time_to_respawn = 0;          // Tiempo en el que vuelven a aparecer más enemigos
+
+int game_score = 0;               // Puntuación obtenida en la partida
 float game_time = 0.0;            // Duración de la partida
+
+int time_to_respawn = 0;          // Tiempo en el que vuelven a aparecer más enemigos
 float last_respawn_time = 0.0;    // Último instante de respawn de enemigos
+int time_to_bomb = 0;             // Tiempo en el que podemos volver a utilizar la bomba
+float last_bomb_time = 0.0;       // Último instante de lanzamiento de la bomba
+
 int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
 int current_enemies = 0;          // Número de enemigos actuales en el tablero
 int max_enemies = 0;              // Número de enemigos máximo en el nivel de velocidad actual
@@ -146,7 +153,7 @@ static void draw_sphere() {
   float color;
 
   // Calculamos el radio y color de la esfera, en función del ángulo y la velocidad de juego
-  radius = ((angle / velocidad) / 90) * (velocidad * 10) + 10;
+  radius = ((angle / speed) / 90) * (speed * 10) + 10;
   color = angle / 90;
 
   argDrawMode3D();              // Cambiamos el contexto a 3D
@@ -160,13 +167,13 @@ static void draw_sphere() {
   glLoadMatrixd(gl_para);                          // por OpenGL
     
   // Dibujamos el objeto con colores entre rojo y verde, según la velocidad de la partida
-  if (velocidad == 1) {
+  if (speed == 1) {
     material[0] = 0.0; material[1] = color; material[2] = 0.0;
-  }else if (velocidad == 2) {
+  }else if (speed == 2) {
     material[0] = 0.0; material[1] = color; material[2] = 0.0;
-  }else if (velocidad == 3) {
+  }else if (speed == 3) {
     material[0] = color; material[1] = 0.0; material[2] = 0.0;
-  }else if (velocidad == 4) {
+  }else if (speed == 4) {
     material[0] = color; material[1] = 0.0; material[2] = 0.0;
   }
   
@@ -186,18 +193,21 @@ static void throw_bomb() {
   for (int i = 0; i < mMarker->marker_num; i++) {
     if (state_enemies[i] == 1) {
       state_enemies[i] = 0;
-      puntuacion++;
+      game_score++;
       current_enemies--;
       printf("Bomba lanzada sobre el enemigo %d\n", i);
     }
   }
 
-  printf("¡¡Quita la bomba para más respawns de enemigos!!\n");
-  printf("Puntación tras bomba: %d\n", puntuacion);
-  
   // Para evitar trampas, tras lanzar una bomba para eliminar enemigos,
   // actualizamos el tiempo de respawn de los enemigos
   last_respawn_time = game_time;
+  last_bomb_time = game_time;
+
+  printf("----------------------------------------------------------\n");
+  printf("Puntación tras lanzar la bomba: %d\n", game_score);
+  printf("Espera %d segundos para volver a lanzarla\n", time_to_bomb);
+  printf("----------------------------------------------------------\n");
 }
 
 // ======== draw multimarca =========================================
@@ -228,9 +238,9 @@ static void draw_multi( void ) {
       // Si el enemigo estaba en el tablero y ahora no se ve, entonces lo hemos eliminado
       if (state_enemies[i] == 1) {
         state_enemies[i] = 0; // quitamos al enemigo del tablero y aumentamos los puntos
-        puntuacion++;
+        game_score++;
         current_enemies--;
-        printf("Puntuación: %d\n", puntuacion);
+        printf("Puntuación: %d\n", game_score);
       }
       // Como no vemos la marca, se dibuja un cubo rojo
       material[0] = 1.0; material[1] = 0.0; material[2] = 0.0;
@@ -265,14 +275,23 @@ static void draw_multi( void ) {
 
   // POSICIONES RELATIVAS: Cálculo de distancias para lanzar la bomba
   if(objects[0].visible == 1) {  // se ha detectado la bomba en el frame actual
+    // Calculamos la distancia de la bomba al multipatrón
     arUtilMatInv(objects[0].patt_trans, m);
     arUtilMatMul(m, mMarker->trans, m2);
-    distancia = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
+    distance = sqrt(pow(m2[0][3],2) + pow(m2[1][3],2) + pow(m2[2][3],2));
     
-    // Si la bomba se encuentra cerca del tablero, tiramos una bomba para eliminar a los enemigos
-    if(distancia <= 400) {
-      //printf ("Distancia bomba y enemigo multimarca = %G\n", distancia);
+    // Si la bomba se encuentra cerca del tablero y se puede utilizar la bomba,
+    // tiramos una bomba para eliminar a los enemigos
+    if(distance <= 400 && (game_time - last_bomb_time) >= time_to_bomb) {
+      //printf("Distancia bomba y enemigo multimarca = %G\n", distance);
       throw_bomb();
+    }
+    else if ((game_time - last_bomb_time) < time_to_bomb) {
+      //printf("Espera %fs para lanzar la bomba\n", time_to_bomb - (game_time - last_bomb_time));
+      // Advertencia al jugador para que quite la marca de la bomba
+      //printf("¡¡Quita la bomba para más respawns de enemigos!!\n");
+      // Para evitar que el jugador use automáticamente la bomba, tendrá que quitarla y haya respawn de nuevos enemigos
+      last_respawn_time = game_time;  
     }
   }
 
@@ -280,24 +299,28 @@ static void draw_multi( void ) {
 }
 
 // ======== rotacion patron =========================================
-static void cambiar_velocidad( void ) {
+static void update_speed( void ) {
   // Modificar velocidad y nivel del juego
-  if (velocidad == 1) {
+  if (speed == 1) {
     max_enemies = 2;
     time_to_respawn = 5;
-  } else if (velocidad == 2) {
+    time_to_bomb = 5;
+  } else if (speed == 2) {
     max_enemies = 3;
     time_to_respawn = 5;
-  } else if (velocidad == 3) {
+    time_to_bomb = 6;
+  } else if (speed == 3) {
     max_enemies = 4;
     time_to_respawn = 5;
-  } else if (velocidad == 4) {
+    time_to_bomb = 8;
+  } else if (speed == 4) {
     max_enemies = 6;
     time_to_respawn = 5;
+    time_to_bomb = 10;
   }
 }
 
-static void calcular_velocidad() {
+static void calculate_speed() {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   GLfloat light_position[]  = {100.0,-200.0,200.0,0.0};
   double v[3];
@@ -330,13 +353,13 @@ static void calcular_velocidad() {
   angle = angle * 2;//de 180 grados pasamos a tener 360 grados
 
   if (angle <= 90)
-    velocidad = 1;
+    speed = 1;
   else if (angle > 90 && angle <= 180)
-    velocidad = 2;
+    speed = 2;
   else if (angle > 180 && angle <= 270)
-    velocidad = 3;
+    speed = 3;
   else if (angle > 270 && angle <= 360)
-    velocidad = 4;
+    speed = 4;
   
 }
 
@@ -447,15 +470,17 @@ static void mainLoop(void) {
         draw_cone();       // Dibujamos un cono sobre la bomba
       else if (i == 1) {   // Si es el objeto MONEDA  
         // ROTACION: Calculamos el ángulo de rotación de la marca
-        calcular_velocidad();
+        calculate_speed();
         // Tras calcular la velocidad del juego, modificamos la configuración del juego
-        cambiar_velocidad();
+        update_speed();
 
         // Mostramos la velocidad de juego actual, si ha cambiado respecto al anterior frame
-        if(velocidad != 0 && velocidad_old != velocidad){
-          //printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", velocidad, angle);
-          printf("¡Cambio de velocidad! VELOCIDAD: %d\n", velocidad);
-          velocidad_old = velocidad;
+        if(speed != 0 && speed_old != speed){
+          //printf("VELOCIDAD %d: Ángulo de %fº en el objeto coin\n", speed, angle);
+          printf("----------------------------------------------------------\n");
+          printf("¡Cambio de nivel! VELOCIDAD: %d\n", speed);
+          printf("----------------------------------------------------------\n");
+          speed_old = speed;
         }
 
         draw_sphere();
