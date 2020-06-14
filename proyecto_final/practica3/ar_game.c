@@ -13,7 +13,7 @@
 #include <AR/param.h>   
 #include <AR/ar.h>
 #include <AR/arMulti.h>   // Multipatrón
-#include <math.h>         // Calcular rotaciones
+#include <math.h>         // Calcular rotaciones y distancias
 #include <string.h>       // Uso de memcpy
 
 // ==== Definicion de constantes y variables globales ===============
@@ -92,11 +92,14 @@ static void keyboard(unsigned char key, int x, int y) {
   
   // Recogemos los eventos de pulsaciones de teclas del teclado
   case 0x1B: case 'Q': case 'q':
-    cleanup(); break;
+    printf("----------------------------------------------------------\n");
+    printf("¡La partida ha terminado! Puntuación obtenida: %d\n", game_score);
+    printf("----------------------------------------------------------\n");
+    cleanup(); 
+    break;
   
   // Histórico de percepciones
-  case 'H':
-  case 'h':
+  case 'H': case 'h':
     if (contAct) {
       contAct = 0; printf("Historico Desactivado\n");
     }

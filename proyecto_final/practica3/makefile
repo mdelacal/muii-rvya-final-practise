@@ -5,7 +5,7 @@ LIB_DIR      = $(ARTOOLKITDIR)/lib
 
 LIBS   =  -lARgsub -lARvideo -lARMulti -lAR -lGL -lGLU -lglut -lm 
 
-NAMEEXEC     = practica
+NAMEEXEC     = ar_game
 
 all: $(NAMEEXEC)
 
