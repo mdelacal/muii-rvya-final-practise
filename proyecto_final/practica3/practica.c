@@ -34,7 +34,7 @@ int time_to_respawn = 0;          // Tiempo en el que vuelven a aparecer más en
 float last_respawn_time = 0.0;    // Último instante de respawn de enemigos
 int time_to_bomb = 0;             // Tiempo en el que podemos volver a utilizar la bomba
 float last_bomb_time = 0.0;       // Último instante de lanzamiento de la bomba
-int flag_bomb = 0;               // Bomba habilitada = 1; deshabilitada 0 
+int flag_bomb = 0;                // Bomba habilitada = 1; deshabilitada 0 
 
 int state_enemies[sizeof(mMarker->marker_num)]; // Estado de los enemigos
 int current_enemies = 0;          // Número de enemigos actuales en el tablero
@@ -124,15 +124,21 @@ static void spawn_enemy(int id) {
 static void draw_cone( void ) {
   double  gl_para[16];   // Esta matriz 4x4 es la usada por OpenGL
   double color = 0.0; 
+  GLdouble cone_size = 20.0;
 
   // Calculamos el color de la bomba
-  if(speed != 0){ // La velocidad de juego se ha elegido
+  if(speed != 0) { // La velocidad de juego se ha elegido
     color = (game_time - last_bomb_time) / time_to_bomb;
+    cone_size = (color * 20.0) + 20.0;
     // Comprobamos si la bomba se ha cargado
     if (color >= 1.0 && flag_bomb == 0) {
-      color = 1.0;
       flag_bomb = 1;
       printf("¡Bomba cargada! Acerca la marca al tablero para eliminar a los enemigos\n");
+    }
+    // Si la bomba está cargada, el color y tamaño del cono se mantienen
+    if (flag_bomb == 1) {
+      color = 1.0;
+      cone_size = 40.0;
     }
   }
   
@@ -155,7 +161,7 @@ static void draw_cone( void ) {
   glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
     glTranslatef(0.0, 0.0, 10.0);
     glRotatef(0.0, 1.0, 0.0, 0.0);
-    glutSolidCone(40, 60, 50, 50);
+    glutSolidCone(cone_size, (cone_size * 2.0), 50, 50);
   glDisable(GL_DEPTH_TEST);
 }
 
