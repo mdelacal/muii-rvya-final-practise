@@ -57,7 +57,7 @@ struct TObject{
   double center[2];                     // Centro del patron
   double patt_trans[3][4];              // Matriz de transformacion de la marca
   double patt_aux[3][4];                // Matriz auxiliar de transformación para histórico percepciones
-  void (* drawme)(float,float,float);   // Puntero a funcion drawme
+  void (* drawme)(void);                // Puntero a funcion drawme
   double vp_trans[N][3][4];             // Array de historico (N matrices 3x4)
   int vpi;  // Inicio del histórico
   int vpe;  // Fin del histórico                            
@@ -67,7 +67,7 @@ struct TObject *objects = NULL;   // Estructura donde se guardan los objetos car
 int nobjects = 0;                 // Número de objetos/patrones cargados
 
 // ==== addObject (Agrega un objeto a la lista de objetos) ==============
-void addObject(char *p, double w, double c[2], void (*drawme)(float,float,float)){
+void addObject(char *p, double w, double c[2], void (*drawme)( void )){
   int patt_id;
 
   if((patt_id = arLoadPatt(p)) < 0)
@@ -228,7 +228,7 @@ static void throw_bomb() {
 
   printf("----------------------------------------------------------\n");
   printf("Puntación tras lanzar la bomba: %d\n", game_score);
-  printf("Espera %d segundos para volver a lanzarla\n", time_to_bomb);
+  printf("Aparta la bomba y espera %d segundos para volver a lanzarla\n", time_to_bomb);
   printf("----------------------------------------------------------\n");
 }
 
@@ -308,7 +308,7 @@ static void draw_multi( void ) {
       //printf("Distancia bomba y enemigo multimarca = %G\n", distance);
       throw_bomb();
     }
-    else if ((game_time - last_bomb_time) < time_to_bomb && distance <= 200) {
+    else if ((game_time - last_bomb_time) < time_to_bomb && distance <= 150) {
       //printf("Espera %fs para lanzar la bomba\n", time_to_bomb - (game_time - last_bomb_time));
       // Advertencia al jugador para que quite la marca de la bomba
       //printf("¡¡Quita la bomba para más respawns de enemigos!!\n");
